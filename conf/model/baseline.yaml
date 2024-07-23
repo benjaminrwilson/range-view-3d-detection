@@ -1,0 +1,57 @@
+# @package _global_
+
+##########################################################################################################
+# EXPERIMENT CONFIGURATION FILE                                                                          #
+##########################################################################################################
+
+defaults:
+  - range_view
+  - _self_
+
+model:
+  augmentations_config:
+    flip_azimuth:
+      p: 0.5
+    random_rotation:
+      low: -0.78539816
+      high: 0.78539816
+      p: 1.0
+    random_global_scale:
+      low: 0.95
+      high: 1.05
+
+  batch_size: 4
+  num_workers: 6
+  use_linear_lr_scaling: true
+
+  _scheduler:
+    max_lr: 0.00075
+
+  _head:
+    coding_weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+
+    fpn:
+      1: 128
+
+    fpn_kernel_sizes:
+      1: [3, 3]
+
+    classification_head_channels: 128
+    regression_head_channels: 128
+
+    targets_config:
+      affinity_fn: GAUSSIAN
+      normalize_affinities: false
+      sigma: 0.75
+
+  post_processing_config:
+    num_pre_nms: 50000
+    num_post_nms: 1000
+    nms_threshold: 0.3
+    min_confidence: 0.1
+    nms_mode: WEIGHTED
+
+dataset:
+  _train_dataset:
+    range_view_config:
+      filter_roi: true

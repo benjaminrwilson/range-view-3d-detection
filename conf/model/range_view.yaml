@@ -1,0 +1,151 @@
+##########################################################################
+# CenterPoint                                                            #
+##########################################################################
+
+# The Centerpoint architecture configuration file.
+
+# This consists of three main components:
+# backbone - 3D processing portion of the network
+# neck - 2D processing portion following 3D feature extraction
+# head - Classification / regression, etc. This portion of the network is task specific.
+
+model:
+  _target_: torchbox3d.nn.arch.detector.Detector
+  _recursive_: false
+
+  _trainer: ${trainer}
+
+  model_name: range_view
+  evaluation_split_name: ${dataset._val_dataset.split_name}
+  tasks: ???
+  batch_size: 12
+  num_devices: ${trainer.devices}
+  num_workers: 6
+  dataset_name: ${dataset.dataset_name}
+  precision: ${trainer.precision}
+  eval_precision: 16
+  debug: false # For model debugging.
+  # dst_dir: ${hydra:run.dir} # Destination directory.
+  dst_dir: ${trainer.default_root_dir}
+  root_dir: ${dataset.root_dir}
+  train_log_freq: 100
+  val_log_freq: 100
+  use_linear_lr_scaling: false
+
+  enable_database: false
+  augmentations_config: null
+  db_config: null
+
+  ##########################################################################
+  # POSTPROCESSING CONFIG                                                  #
+  ##########################################################################
+
+  post_processing_config:
+    num_pre_nms: 50000
+    num_post_nms: 1000
+    nms_threshold: 0.3
+    min_confidence: 0.1
+
+  ##########################################################################
+  # OPTIMIZER                                                              #
+  ##########################################################################
+
+  _optimizer:
+    _target_: torch.optim.adamw.AdamW
+    lr: 1e-3
+
+  _scheduler:
+    _target_: torch.optim.lr_scheduler.OneCycleLR
+    max_lr: 1e-3
+
+  ##########################################################################
+  # NECK                                                                   #
+  ##########################################################################
+
+  _backbone:
+    _target_: torchbox3d.nn.backbones.dla.RangeNet
+    _recursive_: false
+
+    in_channels: 5 # Number of input channels.
+    layers: [64, 64, 128, 128, 128]
+    out_channels: ${.layers.0}
+    projection_kernel_size: 1
+    dataset_name: ${dataset.dataset_name}
+    stem_type: BASIC
+    num_neighbors: 3
+    num_layers: 2
+
+    _net:
+      _target_: torchbox3d.nn.backbones.dla.RangeBackbone
+      in_channels: ${..in_channels}
+      layers: ${..layers}
+      out_channels: ${..out_channels}
+
+  ##########################################################################
+  # HEAD                                                                   #
+  ##########################################################################
+
+  _head:
+    # Center Head Configuration.
+    _target_: torchbox3d.nn.heads.detection_head.DetectionHead
+    _recursive_: false
+
+    tasks_cfg: ${model.tasks} # Task mapping. Maps unique integers to lists of target classes.
+    task_in_channels: ${.._backbone.out_channels} # Task head channels.
+    _cls_loss:
+      _target_: torchbox3d.nn.losses.classification.VarifocalLoss
+      alpha: 0.75
+      gamma: 2
+      reduction: "none"
+    _regression_loss:
+      _target_: torch.nn.L1Loss
+      reduction: "none"
+
+    fpn:
+      1: 128
+
+    fpn_kernel_sizes:
+      1: [3, 3]
+
+    num_classification_blocks: 4
+    num_regression_blocks: 4
+    final_kernel_size: 1
+
+    classification_weight: 1.0
+    regression_weight: 1.0
+
+    classification_normalization_method: FOREGROUND
+
+    targets_config:
+      dataset_name: ${dataset.dataset_name}
+      tasks: ${model.tasks}
+      enable_azimuth_invariant_targets: true
+      range_partitions:
+        1: [0.0, .inf]
+      fpn_assignment_method: null
+      k: .inf
+
+  _decoder:
+    _target_: torchbox3d.nn.decoders.range_decoder.RangeDecoder
+    enable_azimuth_invariant_targets: ${.._head.targets_config.enable_azimuth_invariant_targets}
+    enable_sample_by_range: true
+
+    lower_bounds: [0, 15, 30]
+    upper_bounds: [15, 30, .inf]
+    subsampling_rates: [8, 2, 1]
+
+dataset:
+  _train_dataset:
+    range_view_config:
+      strides: ${model._head.fpn}
+      feature_column_names:
+        - "intensity"
+        - "range"
+        - "x"
+        - "y"
+        - "z"
+
+    x_stride: 1
+    padding_mode: circular
+    use_median_filter: false
+    normalize_input: false

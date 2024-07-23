@@ -1,0 +1,46 @@
+[build-system]
+requires = ["setuptools ~= 58.0", "cython ~= 0.29.0"]
+
+[project]
+name = "torchbox3d"
+requires-python = ">=3.8"
+classifiers = ["Programming Language :: Python :: Implementation :: CPython"]
+
+dynamic = ["license", "version"]
+
+[tool.mypy]
+exclude = "build"
+ignore_missing_imports = true
+disallow_untyped_calls = false
+disallow_untyped_decorators = false
+plugins = "numpy.typing.mypy_plugin"
+strict = true
+
+[[tool.mypy.overrides]]
+module = "torch.*"
+no_implicit_reexport = false
+
+[[tool.mypy.overrides]]
+module = ["pytorch_lightning", "torchsparse"]
+disallow_subclassing_any = false
+
+[tool.pyright]
+include = ["src"]
+
+reportMissingImports = true
+reportMissingTypeStubs = false
+reportPrivateImportUsage = false
+reportUnknownMemberType = false
+reportUntypedFunctionDecorator = false
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+env = ["PYTORCH_JIT = 0"]
+addopts = "--cov-report term-missing:skip-covered --cov src"
+testpaths = ["tests"]
+
+[tool.ruff]
+select = ["D"]
+
+[tool.ruff.pydocstyle]
+convention = "google"

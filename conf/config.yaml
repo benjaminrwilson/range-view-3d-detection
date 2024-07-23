@@ -1,0 +1,41 @@
+# @package _global_
+
+##########################################################################################################
+# EXPERIMENT CONFIGURATION FILE                                                                          #
+##########################################################################################################
+
+defaults:
+  - /experiment: ???
+  - override hydra/launcher: submitit_slurm
+  - _self_
+
+##########################################################################################################
+# Hydra Configuration / Logging                                                                          #
+##########################################################################################################
+
+hydra:
+  mode: RUN
+  run:
+    dir: /coc/scratch/data/experiments/${now:%Y-%m-%d-%H-%M-%S}
+    # dir: /tmp/data/experiments/${now:%Y-%m-%d-%H-%M-%S}
+  sweep:
+    dir: ${hydra.run.dir}
+    # dir: ${trainer.default_root_dir}
+
+  launcher:
+    _target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+    setup:
+      - "#SBATCH --requeue"
+      - "export srun=salloc"
+    # cpus_per_gpu: 16
+    cpus_per_task: 16
+    additional_parameters:
+      gpus_per_node: a40:${trainer.devices}
+    qos: long
+    exclude: robby,chappie,nestor,deebot,spd-13,optimistprime,clippy,kitt,heistotron,chitti,omgwth,cheetah,xaea-12,gundam
+    # exclude: nestor,crushinator,brainiac,megazord,chappie,tachikoma,heistotron,baymax,spd-13,optimistprime,cyborg,clippy,robby,xaea-12
+    partition: hays-lab
+    stderr_to_stdout: true
+    submitit_folder: ${hydra.run.dir}
+    tasks_per_node: ${trainer.devices}
+    timeout_min: 10080

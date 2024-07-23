@@ -1,0 +1,53 @@
+# av2 dataset.
+
+_target_: torchbox3d.prototype.loader.DataModule # Mapping to Python class for `hydra`.
+_recursive_: false
+
+batch_size: ${model.batch_size}
+num_workers: ${model.num_workers}
+root_dir: ${oc.env:HOME}/data/datasets/av2/sensor
+debug: ${model.debug}
+
+dataset_name: av2
+
+_train_dataset:
+  _target_: torchbox3d.prototype.loader.DataLoader
+  root_dir: ${..root_dir}
+  dataset_name: ${..dataset_name}
+  split_name: train
+  range_view_config:
+    height: 64
+    width: 1800
+  targets_config: ${model._head.targets_config}
+  subsampling_rate: 1
+  x_stride: 1
+  padding_mode: constant
+  normalize_input: false
+  enable_database: ${model.enable_database}
+  augmentations_config: ${model.augmentations_config}
+  db_config: ${model.db_config}
+  use_repeat_factor_sampling: false
+
+_val_dataset:
+  _target_: torchbox3d.prototype.loader.DataLoader
+  root_dir: ${..root_dir}
+  dataset_name: ${..dataset_name}
+  split_name: val
+  range_view_config: ${.._train_dataset.range_view_config}
+  targets_config: ${model._head.targets_config}
+  subsampling_rate: 1
+  x_stride: ${.._train_dataset.x_stride}
+  padding_mode: ${.._train_dataset.padding_mode}
+  normalize_input: ${.._train_dataset.normalize_input}
+
+_test_dataset:
+  _target_: torchbox3d.prototype.loader.DataLoader
+  root_dir: ${..root_dir}
+  dataset_name: ${..dataset_name}
+  split_name: test
+  range_view_config: ${.._train_dataset.range_view_config}
+  targets_config: ${model._head.targets_config}
+  subsampling_rate: 1
+  x_stride: ${.._train_dataset.x_stride}
+  padding_mode: ${.._train_dataset.padding_mode}
+  normalize_input: ${.._train_dataset.normalize_input}

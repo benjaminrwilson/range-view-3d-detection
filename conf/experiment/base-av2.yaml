@@ -1,0 +1,51 @@
+# @package _global_
+
+##########################################################################################################
+# EXPERIMENT CONFIGURATION FILE                                                                          #
+##########################################################################################################
+
+defaults:
+  - base
+  - override /model: baseline
+  - override /dataset: av2
+  - override /trainer: train
+  - _self_
+
+name: base-av2
+model:
+  tasks:
+    0:
+      [
+        "ARTICULATED_BUS",
+        "BICYCLE",
+        "BICYCLIST",
+        "BOLLARD",
+        "BOX_TRUCK",
+        "BUS",
+        "CONSTRUCTION_BARREL",
+        "CONSTRUCTION_CONE",
+        "DOG",
+        "LARGE_VEHICLE",
+        "MESSAGE_BOARD_TRAILER",
+        "MOBILE_PEDESTRIAN_CROSSING_SIGN",
+        "MOTORCYCLE",
+        "MOTORCYCLIST",
+        "PEDESTRIAN",
+        "REGULAR_VEHICLE",
+        "SCHOOL_BUS",
+        "SIGN",
+        "STOP_SIGN",
+        "STROLLER",
+        "TRUCK",
+        "TRUCK_CAB",
+        "VEHICULAR_TRAILER",
+        "WHEELCHAIR",
+        "WHEELED_DEVICE",
+        "WHEELED_RIDER",
+      ]
+
+dataset:
+  root_dir: ${oc.env:HOME}/data/datasets/av2-32-upper/sensor
+  _train_dataset:
+    range_view_config:
+      height: 32

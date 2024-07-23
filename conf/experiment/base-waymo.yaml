@@ -1,0 +1,33 @@
+# @package _global_
+
+##########################################################################################################
+# EXPERIMENT CONFIGURATION FILE                                                                          #
+##########################################################################################################
+
+defaults:
+  - base
+  - override /model: baseline
+  - override /dataset: waymo
+  - override /trainer: train
+  - _self_
+
+name: base-waymo
+model:
+  _backbone:
+    in_channels: 6 # Number of input channels.
+
+  tasks:
+    0: ["CYCLIST", "PEDESTRIAN", "VEHICLE"]
+
+dataset:
+  _train_dataset:
+    range_view_config:
+      strides: ${model._head.fpn}
+      feature_column_names:
+        - "elongation"
+        - "intensity"
+        - "range"
+        - "x"
+        - "y"
+        - "z"
+      filter_roi: false

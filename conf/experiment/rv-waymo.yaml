@@ -1,0 +1,22 @@
+# @package _global_
+
+##########################################################################################################
+# EXPERIMENT CONFIGURATION FILE                                                                          #
+##########################################################################################################
+
+defaults:
+  - base-waymo
+  - _self_
+
+name: rv-waymo
+model:
+  _backbone:
+    stem_type: META
+    layers: [128, 128, 128, 128, 128]
+
+  _head:
+    fpn:
+      1: 256
+
+    classification_head_channels: 256
+    regression_head_channels: 256

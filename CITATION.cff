@@ -1,0 +1,13 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: Wilson
+  given-names: Benjamin
+  orcid: https://orcid.org/0000-0002-9715-7551
+- family-names: Pontes
+  given-names: Jhony
+  orcid: https://orcid.org/0000-0002-7159-1018
+title: torchbox3d
+version: 0.0.1
+date-released: 2022-04-11
+url: https://github.com/benjaminrwilson/torchbox3d
