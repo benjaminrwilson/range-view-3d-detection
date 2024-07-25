@@ -2,7 +2,6 @@ name: tb3
 channels:
   - conda-forge
 dependencies:
-  - conda-forge/label/rust_dev::rust
   - gxx==10.*
   - hydra-core
   - kornia
@@ -21,6 +20,7 @@ dependencies:
   - pyyaml
   - rich
   - ruff
+  - rust
   - scipy
   - tensorflow==2.11.0
   - torchsparse
@@ -30,4 +30,3 @@ dependencies:
   - pip:
       - hydra-submitit-launcher
       - git+https://github.com/argoverse/av2-api.git
-      # - waymo-open-dataset-tf-2-11-0
