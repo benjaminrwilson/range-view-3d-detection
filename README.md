@@ -1,4 +1,6 @@
-# Beta Release
+# What Matters in Range View 3D Object Detection
+
+Paper: https://arxiv.org/abs/2407.16789
 
 ## Datasets
 
