@@ -2,6 +2,7 @@ name: tb3
 channels:
   - conda-forge
 dependencies:
+  - cudatoolkit-dev==11.2.2
   - gxx==10.*
   - hydra-core
   - kornia
@@ -15,6 +16,7 @@ dependencies:
   - pip
   - polars
   - pyarrow
+  - python==3.9.*
   - pytorch
   - pytorch-lightning
   - pyyaml
