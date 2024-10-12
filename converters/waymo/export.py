@@ -1,18 +1,29 @@
+"""Converts the Waymo Open dataset to Argoverse 2 format.
+
+Largely based on https://github.com/johnwlambert/waymo_to_argoverse by John Lambert.
+"""
+
 import glob
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Final, List, Tuple
 
+import cv2
+import google
 import numpy as np
 import pandas as pd
+import polars as pl
 import tensorflow.compat.v1 as tf
-import torch
 import waymo_open_dataset
+from av2.geometry.se3 import SE3
 from scipy.spatial.transform import Rotation
 from tqdm import tqdm
+from tqdm.contrib.concurrent import process_map
 from waymo_open_dataset import dataset_pb2
 from waymo_open_dataset import dataset_pb2 as open_dataset
 from waymo_open_dataset.utils import frame_utils, range_image_utils, transform_utils
+
+import utils
 
 tf.enable_eager_execution()
 
@@ -121,10 +132,6 @@ def convert_range_image_to_cartesian(
         nlz_mask = range_image_tensor[..., 3] != 1.0  # 1.0: in NLZ
 
         range_image_mask = tf.cast((range_image_mask & nlz_mask), tf.float32)
-
-        # print((~nlz_mask).numpy().sum())
-        # breakpoint()
-
         range_image_cartesian = tf.squeeze(range_image_cartesian, axis=0)
 
         if keep_polar_features:
@@ -165,15 +172,17 @@ def get_log_ids_from_files(record_dir: str) -> Dict[str, str]:
     return log_ids
 
 
-def _helper(item):
+def _helper(item: Tuple[str, str, str], write: bool = True) -> None:
     track_id_dict = {}
 
     annotations_list = []
     poses_list = []
 
-    log_id, tf_fpath, ARGO_WRITE_DIR = item
+    log_id, tf_fpath, dst_dir = item
     dataset = tf.data.TFRecordDataset(tf_fpath, compression_type="")
     dataset = [d for d in dataset]
+
+    has_written_intrinsics_extrinsics = False
     for data in tqdm(dataset):
         frame = open_dataset.Frame()
         frame.ParseFromString(bytearray(data.numpy()))
@@ -184,17 +193,67 @@ def _helper(item):
         # of the first top lidar spin within this frame, in microseconds
         timestamp_ms = frame.timestamp_micros
         timestamp_ns = int(timestamp_ms * 1000)  # to nanoseconds
+
         SE3_flattened = np.array(frame.pose.transform)
         city_SE3_egovehicle = SE3_flattened.reshape(4, 4)
 
-        pose = dump_pose(city_SE3_egovehicle, timestamp_ns, log_id, ARGO_WRITE_DIR)
+        pose = export_pose(city_SE3_egovehicle, timestamp_ns)
         poses_list.append(pose)
 
-        # frame_utils.convert_frame_to_dict(frame)
+        intrinsics, extrinsics = form_calibration_json(
+            frame.context.camera_calibrations
+        )
+        if not has_written_intrinsics_extrinsics:
+            if write:
+                intrinsics_dst = (
+                    Path(dst_dir) / log_id / "calibration" / "intrinsics.feather"
+                )
+
+                intrinsics_dst.parent.mkdir(parents=True, exist_ok=True)
+                intrinsics.to_feather(intrinsics_dst, compression="uncompressed")
+
+                extrinsics_dst = (
+                    Path(dst_dir)
+                    / log_id
+                    / "calibration"
+                    / "egovehicle_SE3_sensor.feather"
+                )
+                extrinsics.to_feather(extrinsics_dst, compression="uncompressed")
+
+        for _, tf_cam_image in enumerate(frame.images):
+            # 4x4 row major transform matrix that transforms
+            # 3d points from one frame to another.
+            SE3_flattened = np.array(tf_cam_image.pose.transform)
+            city_SE3_egovehicle = SE3_flattened.reshape(4, 4)
+
+            cam_timestamp_s = tf_cam_image.pose_timestamp
+            cam_timestamp_ns = int(cam_timestamp_s * 1e9)  # to nanoseconds
+            pose = export_pose(city_SE3_egovehicle, cam_timestamp_ns)
+            poses_list.append(pose)
+
+            camera_name: str = CAMERA_NAMES[tf_cam_image.name]
+            img = tf.image.decode_jpeg(tf_cam_image.image)
+            undistorted_img = utils.undistort_image(
+                np.asarray(img),
+                frame.context.camera_calibrations,
+                tf_cam_image.name,
+            )
+            img_dst = (
+                Path(dst_dir)
+                / log_id
+                / "sensors"
+                / "cameras"
+                / camera_name
+                / f"{cam_timestamp_ns}.jpg"
+            )
+            img_dst.parent.mkdir(parents=True, exist_ok=True)
+            undistorted_img_bgr = cv2.cvtColor(undistorted_img, cv2.COLOR_BGR2RGB)
+            cv2.imwrite(str(img_dst), undistorted_img_bgr)
 
         # Reading lidar data and saving it in point cloud format
         # We are only using the first range image (Waymo provides two range images)
         # If you want to use the second one, you can change it in the arguments
+
         (
             range_images,
             _,
@@ -211,111 +270,118 @@ def _helper(item):
         )
 
         range_image = first_return_cartesian_range_images[1].numpy()
-        # points_all_ri = range_image.reshape(-1, 6)
-        # points_all_ri = np.concatenate(points_ri[:1], axis=0)
-        # laser_number = np.zeros_like(points_all_ri[:, 0:1])
-
-        range_image = (
-            torch.as_tensor(range_image)
-            .permute(2, 0, 1)
-            .contiguous()
-            .type(torch.bfloat16)
+        points_all_ri = range_image.reshape(-1, 6)
+        lidar_frame = pd.DataFrame(
+            points_all_ri,
+            columns=["range", "intensity", "elongation", "x", "y", "z"],
         )
+        lidar_frame = lidar_frame[["x", "y", "z", "range", "intensity", "elongation"]]
+        if write:
+            lidar_dst = (
+                Path(dst_dir)
+                / log_id
+                / "sensors"
+                / "range_view"
+                / f"{timestamp_ns}.jpg"
+            )
+            lidar_frame.to_feather(lidar_dst, compression="uncompressed")
 
-        perm = [1, 2, 0, 3, 4, 5]
-        range_image = range_image[perm].contiguous()
-        range_image[0] = range_image[0].tanh()
-
-        # lidar_frame = pd.DataFrame(
-        #     points_all_ri,
-        #     columns=["range", "intensity", "elongation", "x", "y", "z"],
-        # )
-        # lidar_frame = lidar_frame[
-        #     ["x", "y", "z", "range", "intensity", "elongation"]
-        # ]
-
-        # # # https://github.com/open-mmlab/mmdetection3d/issues/299
-        # lidar_frame["intensity"] = np.tanh(lidar_frame["intensity"])
-
-        dst = Path(ARGO_WRITE_DIR) / log_id / "sensors" / "lidar" / f"{timestamp_ns}.pt"
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(range_image, dst)
-        # lidar_frame.to_feather(dst, compression="uncompressed")
-
-        annotations = dump_object_labels(
+        annotations = export_annotations(
             frame.laser_labels,
             timestamp_ns,
             log_id,
-            ARGO_WRITE_DIR,
+            dst_dir,
             track_id_dict,
         )
         annotations_list.append(annotations)
+
     annotations = pd.concat(annotations_list).reset_index(drop=True)
-    dst = Path(ARGO_WRITE_DIR) / log_id / "annotations.feather"
-    annotations.to_feather(dst, compression="uncompressed")
-
-    dst = Path(ARGO_WRITE_DIR) / log_id / "city_SE3_egovehicle.feather"
     poses = pd.concat(poses_list).reset_index(drop=True)
-    poses.to_feather(dst, compression="uncompressed")
+
+    if write:
+        annotations_dst = Path(dst_dir) / log_id / "annotations.feather"
+        annotations.to_feather(annotations_dst, compression="uncompressed")
+
+        poses_dst = Path(dst_dir) / log_id / "city_SE3_egovehicle.feather"
+        poses.to_feather(poses_dst, compression="uncompressed")
 
 
-# def form_calibration_json(
-#     calib_data: google.protobuf.pyext._message.RepeatedCompositeContainer,
-# ) -> Dict[str, Any]:
-#     """Create a JSON file per log containing calibration information, in the Argoverse format.
+def form_calibration_json(
+    calib_data: google.protobuf.pyext._message.RepeatedCompositeContainer,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """Create a JSON file per log containing calibration information, in the Argoverse format.
 
-#     Argoverse expects to receive "egovehicle_T_camera", i.e. from camera -> egovehicle, with
-#         rotation parameterized as a quaternion.
-#     Waymo provides the same SE(3) transformation, but with rotation parameterized as a 3x3 matrix.
-#     """
-#     calib_dict = {"camera_data_": []}
-#     for camera_calib in calib_data:
-#         cam_name = CAMERA_NAMES[camera_calib.name]
-#         # They provide "Camera frame to vehicle frame."
-#         # https://github.com/waymo-research/waymo-open-dataset/blob/master/waymo_open_dataset/dataset.proto
-#         egovehicle_SE3_waymocam = np.array(camera_calib.extrinsic.transform).reshape(
-#             4, 4
-#         )
-#         standardcam_R_waymocam = transform_utils.rotY(-90) @ transform_utils.rotX(90)
-#         standardcam_SE3_waymocam = SE3(
-#             rotation=standardcam_R_waymocam, translation=np.zeros(3)
-#         )
-#         egovehicle_SE3_waymocam = SE3(
-#             rotation=egovehicle_SE3_waymocam[:3, :3],
-#             translation=egovehicle_SE3_waymocam[:3, 3],
-#         )
-#         standardcam_SE3_egovehicle = standardcam_SE3_waymocam.compose(
-#             egovehicle_SE3_waymocam.inverse()
-#         )
-#         egovehicle_SE3_standardcam = standardcam_SE3_egovehicle.inverse()
-#         egovehicle_q_camera = transform_utils.rotmat2quat(
-#             egovehicle_SE3_standardcam.rotation
-#         )
-#         x, y, z = egovehicle_SE3_standardcam.translation
-#         qw, qx, qy, qz = egovehicle_q_camera
-#         f_u, f_v, c_u, c_v, k1, k2, p1, p2, k3 = camera_calib.intrinsic
-#         cam_dict = {
-#             "key": "image_raw_" + cam_name,
-#             "value": {
-#                 "focal_length_x_px_": f_u,
-#                 "focal_length_y_px_": f_v,
-#                 "focal_center_x_px_": c_u,
-#                 "focal_center_y_px_": c_v,
-#                 "skew_": 0,
-#                 "distortion_coefficients_": [0, 0, 0],
-#                 "vehicle_SE3_camera_": {
-#                     "rotation": {"coefficients": [qw, qx, qy, qz]},
-#                     "translation": [x, y, z],
-#                 },
-#             },
-#         }
-#         calib_dict["camera_data_"] += [cam_dict]
-#     return calib_dict
+    Argoverse expects to receive "egovehicle_T_camera", i.e. from camera -> egovehicle, with
+        rotation parameterized as a quaternion.
+    Waymo provides the same SE(3) transformation, but with rotation parameterized as a 3x3 matrix.
+    """
+    intrinsics_list = []
+    extrinsics_list = []
+    for camera_calib in calib_data:
+        cam_name = CAMERA_NAMES[camera_calib.name]
+        # They provide "Camera frame to vehicle frame."
+        # https://github.com/waymo-research/waymo-open-dataset/blob/master/waymo_open_dataset/dataset.proto
+        egovehicle_SE3_waymocam = np.array(camera_calib.extrinsic.transform).reshape(
+            4, 4
+        )
+        standardcam_R_waymocam = utils.rotY(-90) @ utils.rotX(90)
+        standardcam_SE3_waymocam = SE3(
+            rotation=standardcam_R_waymocam, translation=np.zeros(3)
+        )
+        egovehicle_SE3_waymocam = SE3(
+            rotation=egovehicle_SE3_waymocam[:3, :3],
+            translation=egovehicle_SE3_waymocam[:3, 3],
+        )
+        standardcam_SE3_egovehicle = standardcam_SE3_waymocam.compose(
+            egovehicle_SE3_waymocam.inverse()
+        )
+        egovehicle_SE3_standardcam = standardcam_SE3_egovehicle.inverse()
+        egovehicle_q_camera = utils.rotmat2quat(egovehicle_SE3_standardcam.rotation)
+        tx_m, ty_m, tz_m = egovehicle_SE3_standardcam.translation
+        qw, qx, qy, qz = egovehicle_q_camera
+        f_u, f_v, c_u, c_v, k1, k2, p1, p2, k3 = camera_calib.intrinsic
+        height_px = camera_calib.height
+        width_px = camera_calib.width
+        cam_intrinsics = pl.DataFrame(
+            {
+                "sensor_name": cam_name,
+                "fx_px": f_u,
+                "fy_px": f_v,
+                "cx_px": c_u,
+                "cy_px": c_v,
+                "k1": k1,
+                "k2": k2,
+                "k3": k3,
+                "height_px": height_px,
+                "width_px": width_px,
+            }
+        )
+        intrinsics_list.append(cam_intrinsics)
+
+        cam_extrinsics = pl.DataFrame(
+            {
+                "sensor_name": cam_name,
+                "qw": qw,
+                "qx": qx,
+                "qy": qy,
+                "qz": qz,
+                "tx_m": tx_m,
+                "ty_m": ty_m,
+                "tz_m": tz_m,
+            }
+        )
+
+        extrinsics_list.append(cam_extrinsics)
+
+    intrinsics = pl.concat(intrinsics_list)
+    extrinsics = pl.concat(extrinsics_list)
+    return intrinsics.to_pandas(), extrinsics.to_pandas()
 
 
-def dump_pose(
-    city_SE3_egovehicle: np.ndarray, timestamp: int, log_id: str, parent_path: str
-) -> None:
+def export_pose(
+    city_SE3_egovehicle: np.ndarray,
+    timestamp: int,
+) -> pd.DataFrame:
     """Saves the pose of the egovehicle in the city coordinate frame at a particular timestamp.
 
     The SE(3) transformation is stored as a quaternion and length-3 translation vector.
@@ -333,7 +399,7 @@ def dump_pose(
     q = rotmat2quat(R)
     qw, qx, qy, qz = q
 
-    frame = pd.DataFrame.from_dict(
+    frame = pl.DataFrame(
         {
             "timestamp_ns": timestamp,
             "qw": qw,
@@ -343,19 +409,18 @@ def dump_pose(
             "tx_m": x,
             "ty_m": y,
             "tz_m": z,
-        },
-        orient="index",
+        }
     )
-    return frame.T
+    return frame.to_pandas()
 
 
-def dump_object_labels(
+def export_annotations(
     labels: List[waymo_open_dataset.label_pb2.Label],
     timestamp: int,
     log_id: str,
     parent_path: str,
     track_id_dict: Dict[str, str],
-) -> None:
+) -> pd.DataFrame:
     """Saves object labels from Waymo dataset as json files.
 
     Args:
@@ -491,26 +556,12 @@ def rotY(deg: float) -> np.ndarray:
 def main() -> None:
     split = "training"
     SPLIT_MAPPING = {"training": "train", "validation": "val", "testing": "test"}
-    TFRECORD_DIR = str(Path.home() / "data" / "datasets" / "waymo_original" / split)
-    ARGO_WRITE_DIR = str(
-        Path.home()
-        / "data"
-        / "datasets"
-        / "waymo-bf16"
-        / "sensor"
-        / SPLIT_MAPPING[split]
+    SRC_DIR = str(Path.home() / ".." / "datasets" / "waymo" / split)
+    DST_DIR = str(
+        Path.home() / "data" / "datasets" / "waymo" / "sensor" / SPLIT_MAPPING[split]
     )
-    track_id_dict = {}
-    log_ids = get_log_ids_from_files(TFRECORD_DIR)
-
-    annotations_list = []
-    poses_list = []
-
-    from tqdm.contrib.concurrent import process_map
-
-    iters = [(a, b, ARGO_WRITE_DIR) for (a, b) in log_ids.items()]
-    # for iterable in tqdm(iters):
-    #     _helper(iterable)
+    log_ids = get_log_ids_from_files(SRC_DIR)
+    iters = [(a, b, DST_DIR) for (a, b) in log_ids.items()]
     process_map(_helper, iters, max_workers=16)
 
 
