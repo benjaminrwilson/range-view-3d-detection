@@ -71,7 +71,7 @@ def build_dataframe(
     dts_lazy = (
         dts.join(uuids_lazy, on="batch_index")
         .join(task_frame_lazy, on="category_index")
-        .drop(["category_index", "task_index", "task_offset"])
+        .drop(["category_index", "task_id", "offset"])
     )
     return dts_lazy.collect()
 

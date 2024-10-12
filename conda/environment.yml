@@ -3,6 +3,7 @@ channels:
   - conda-forge
 dependencies:
   - cudatoolkit-dev==11.2.2
+  - detectron2
   - gxx==10.*
   - hydra-core
   - kornia
