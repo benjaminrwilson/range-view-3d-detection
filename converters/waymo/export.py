@@ -554,15 +554,20 @@ def rotY(deg: float) -> np.ndarray:
 
 
 def main() -> None:
-    split = "training"
-    SPLIT_MAPPING = {"training": "train", "validation": "val", "testing": "test"}
-    SRC_DIR = str(Path.home() / ".." / "datasets" / "waymo" / split)
-    DST_DIR = str(
-        Path.home() / "data" / "datasets" / "waymo" / "sensor" / SPLIT_MAPPING[split]
-    )
-    log_ids = get_log_ids_from_files(SRC_DIR)
-    iters = [(a, b, DST_DIR) for (a, b) in log_ids.items()]
-    process_map(_helper, iters, max_workers=16)
+    SPLIT_MAPPING = {"training": "train", "validation": "val"}
+    for split, _ in SPLIT_MAPPING.items():
+        SRC_DIR = str(Path.home() / ".." / "datasets" / "waymo" / split)
+        DST_DIR = str(
+            Path.home()
+            / "data"
+            / "datasets"
+            / "waymo"
+            / "sensor"
+            / SPLIT_MAPPING[split]
+        )
+        log_ids = get_log_ids_from_files(SRC_DIR)
+        iters = [(a, b, DST_DIR) for (a, b) in log_ids.items()]
+        process_map(_helper, iters, max_workers=16)
 
 
 if __name__ == "__main__":
