@@ -340,14 +340,10 @@ def prepare_data(
     )
 
     gts = gts.with_columns(
-        category=pl.col("category").map_elements(
-            lambda x: CATEGORY_TO_INDEX[x], return_dtype=pl.UInt32
-        )
+        category=pl.col("category").replace_strict(CATEGORY_TO_INDEX)
     ).rename({"category": "object_type"})
     dts = dts.with_columns(
-        category=pl.col("category").map_elements(
-            lambda x: CATEGORY_TO_INDEX[x], return_dtype=pl.UInt32
-        )
+        category=pl.col("category").replace_strict(CATEGORY_TO_INDEX)
     ).rename({"category": "object_type"})
     return dts, gts
 
