@@ -384,7 +384,7 @@ class DataLoader:
 
                 r_i = (
                     annotations.join(rfs, "category")
-                    .groupby(("log_id", "timestamp_ns"), maintain_order=True)
+                    .group_by(("log_id", "timestamp_ns"), maintain_order=True)
                     .agg(pl.col("r_c").max())
                 )
 

@@ -363,8 +363,9 @@ class Detector(MetaDetector):
                     debug=self.debug,
                 )
 
-            for (log_id, timestamp_ns), group in dts.groupby(
-                ["log_id", "timestamp_ns"]
+            for (log_id, timestamp_ns), group in dts.group_by(
+                ["log_id", "timestamp_ns"],
+                maintain_order=True,
             ):
                 dst = (
                     Path(self.dst_dir)
@@ -665,9 +666,12 @@ def format_evaluation_metrics(
     )
 
     # Join median number of interior points
-    median_interior_pts = gts.group_by(by="category").agg(
-        pl.col("num_interior_pts").median().cast(pl.UInt32).alias("med_pts")
+    median_interior_pts = (
+        gts.group_by(by="category")
+        .agg(pl.col("num_interior_pts").median().cast(pl.UInt32).alias("med_pts"))
+        .rename({"by": "category"})
     )
+
     metrics = metrics.join(
         median_interior_pts,
         on="category",
