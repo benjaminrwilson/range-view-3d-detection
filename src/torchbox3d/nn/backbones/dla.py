@@ -149,6 +149,7 @@ class RangeNet(nn.Module):
 
     stem: nn.Module = field(init=False)
     net: nn.Module = field(init=False)
+    compile: bool = False
 
     def __post_init__(self) -> None:
         """Initialize network modules.
@@ -185,6 +186,9 @@ class RangeNet(nn.Module):
         else:
             raise NotImplementedError("This stem type is not implemented!")
         self.net = instantiate(self._net)
+        if self.compile:
+            self.stem = torch.compile(self.stem)
+            self.net = torch.compile(self.net)
 
     def forward(self, x: Dict[str, Tensor]) -> Tensor:
         """Network forward pass."""

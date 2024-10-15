@@ -20,8 +20,9 @@ from pytorch_lightning.loggers.wandb import WandbLogger
 from pytorch_lightning.trainer.states import RunningStage
 from pytorch_lightning.utilities.rank_zero import rank_zero_only
 from torch import Tensor
-from torchbox3d.math.polytope import cuboids_to_vertices
 from torchvision.io.image import write_png
+
+from torchbox3d.math.polytope import cuboids_to_vertices
 
 GREYS: Final = (
     torch.stack([torch.as_tensor(get_cmap("binary_r")(i)[:3]) for i in range(256)])

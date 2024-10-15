@@ -70,6 +70,7 @@ class DetectionHead(LightningModule):
 
     classification_head: nn.ModuleDict = field(init=False)
     regression_head: nn.ModuleDict = field(init=False)
+    compile: bool = False
 
     def __post_init__(self) -> None:
         """Initialize network modules."""
@@ -114,6 +115,18 @@ class DetectionHead(LightningModule):
         )
         self.cls_loss = instantiate(self._cls_loss)
         self.regression_loss = instantiate(self._regression_loss)
+
+        if self.compile:
+            for stride, _ in self.fpn.items():
+                for k, _ in self.tasks_cfg.items():
+                    stride = str(stride)
+                    k = str(k)
+                    self.classification_head[stride][k] = torch.compile(
+                        self.classification_head[stride][k]
+                    )
+                    self.regression_head[stride][k] = torch.compile(
+                        self.regression_head[stride][k]
+                    )
 
     def forward(
         self,
