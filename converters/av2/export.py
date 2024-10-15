@@ -1,10 +1,10 @@
+"""Tool export the Argoverse 2 dataset with range images."""
+
 import shutil
 from pathlib import Path
 from typing import Any, Dict, Final, Tuple
 
-import cv2
 import matplotlib
-import numpy as np
 import polars as pl
 from av2.map.map_api import ArgoverseStaticMap, RasterLayerType
 from av2.utils.io import read_city_SE3_ego
@@ -28,7 +28,9 @@ FEATURE_COLUMN_NAMES: Tuple[str, ...] = (
 )
 
 
-def main(
+def export_dataset(
+    root_dir: Path,
+    dst_dir: Path,
     range_view_config: Dict[str, Any],
     enable_write: bool = False,
 ) -> None:
@@ -39,13 +41,10 @@ def main(
     export_range_view = range_view_config["export_range_view"]
     enable_motion_uncompensation = range_view_config["enabled_motion_uncompensation"]
 
-    root_dir = Path.home() / "data" / "datasets" / "av2_original" / "sensor"
-    dst_dir = Path.home() / "data" / "datasets" / "av2-64" / "sensor"
-    splits = ["val"]
-
+    splits = ["train", "val"]
     for split in splits:
         split_dir = root_dir / split
-        for i, log_dir in enumerate(tqdm(sorted(split_dir.glob("*")))):
+        for _, log_dir in enumerate(tqdm(sorted(split_dir.glob("*")))):
             avm = ArgoverseStaticMap.from_map_dir(log_dir / "map", build_raster=True)
 
             log_id = log_dir.stem
@@ -171,4 +170,16 @@ if __name__ == "__main__":
         "export_range_view": True,
         "enabled_motion_uncompensation": True,
     }
-    main(range_view_config=range_view_config, enable_write=True)
+
+    # Root directory for the Argoverse 2 sensor dataset (raw files).
+    root_dir = Path.home() / "data" / "datasets" / "av2" / "sensor"
+
+    # Destination directory for the processed data.
+    dst_dir = Path.home() / "data" / "datasets" / "av2-32" / "sensor"
+
+    export_dataset(
+        root_dir=root_dir,
+        dst_dir=dst_dir,
+        range_view_config=range_view_config,
+        enable_write=True,
+    )
