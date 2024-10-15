@@ -505,18 +505,20 @@ def export_dataset(src_root_dir: Path, dst_root_dir: Path) -> None:
     # Process all the splits.
     for split, _ in SPLIT_MAPPING.items():
         src_dir = str(src_root_dir / split)
-        dst_dir = str(dst_root_dir / "sensor" / SPLIT_MAPPING[split])
+        dst_dir = str(dst_root_dir / SPLIT_MAPPING[split])
         log_ids = get_log_ids_from_files(src_dir)
         iters = [(a, b, dst_dir) for (a, b) in log_ids.items()]
         process_map(export_log, iters, max_workers=16)
 
 
 if __name__ == "__main__":
-    # Path to the raw Waymo Open dataset (i.e., TFRecords) root.
+    # Path to the raw Waymo Open dataset splits root.
+    # The TFRecords should be in the following directory format (as an example) `src_root_dir/{split_name}/segment-18149616047892103767_2460_000_2480_000_with_camera_labels.tfrecord`.
+    # This script will export the training and validation splits by default.
     src_root_dir = Path.home() / ".." / "datasets" / "waymo"
 
     # Path to the destination for the exported Waymo Open dataset.
-    dst_root_dir = Path.home() / "datasets" / "waymo"
+    dst_root_dir = Path.home() / "datasets" / "waymo" / "sensor"
 
     # Export the dataset. This may take awhile.
     export_dataset(src_root_dir=src_root_dir, dst_root_dir=dst_root_dir)

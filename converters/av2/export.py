@@ -29,8 +29,8 @@ FEATURE_COLUMN_NAMES: Tuple[str, ...] = (
 
 
 def export_dataset(
-    root_dir: Path,
-    dst_dir: Path,
+    src_root_dir: Path,
+    dst_root_dir: Path,
     range_view_config: Dict[str, Any],
     enable_write: bool = False,
 ) -> None:
@@ -43,12 +43,12 @@ def export_dataset(
 
     splits = ["train", "val"]
     for split in splits:
-        split_dir = root_dir / split
+        split_dir = src_root_dir / split
         for _, log_dir in enumerate(tqdm(sorted(split_dir.glob("*")))):
             avm = ArgoverseStaticMap.from_map_dir(log_dir / "map", build_raster=True)
 
             log_id = log_dir.stem
-            dst_log_dir = dst_dir / split / log_id
+            dst_log_dir = dst_root_dir / split / log_id
             dst_log_dir.mkdir(exist_ok=True, parents=True)
 
             annotations_path = log_dir / "annotations.feather"
@@ -172,14 +172,14 @@ if __name__ == "__main__":
     }
 
     # Root directory for the Argoverse 2 sensor dataset (raw files).
-    root_dir = Path.home() / "data" / "datasets" / "av2" / "sensor"
+    src_root_dir = Path.home() / "datasets" / "av2" / "sensor"
 
     # Destination directory for the processed data.
-    dst_dir = Path.home() / "data" / "datasets" / "av2-32" / "sensor"
+    dst_root_dir = Path.home() / "datasets" / "av2-32" / "sensor"
 
     export_dataset(
-        root_dir=root_dir,
-        dst_dir=dst_dir,
+        src_root_dir=src_root_dir,
+        dst_root_dir=dst_root_dir,
         range_view_config=range_view_config,
         enable_write=True,
     )
