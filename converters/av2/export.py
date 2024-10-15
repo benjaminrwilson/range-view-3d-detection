@@ -143,13 +143,6 @@ def main(
                         range_view_dst.parent.mkdir(parents=True, exist_ok=True)
                         range_view.write_ipc(range_view_dst)
 
-                    dists = range_view["range"].to_numpy().reshape(height, width)
-                    dists = turbo(dists / dists.max()) * 255.0
-
-                    fname = f"{sensor_name}.png"
-                    cv2.imwrite(fname, dists[:, :, :3])
-                    breakpoint()
-
                 if enable_write:
                     lidar_dst = (
                         dst_log_dir / "sensors" / "lidar" / f"{timestamp_ns}.feather"
