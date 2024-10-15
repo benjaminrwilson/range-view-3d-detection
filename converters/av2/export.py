@@ -172,10 +172,10 @@ def main(
 if __name__ == "__main__":
     range_view_config = {
         "build_uniform_inclination": False,
-        "sensor_name": "all",
-        "height": 64,
+        "sensor_name": "up_lidar",
+        "height": 32,
         "width": 1800,
         "export_range_view": True,
-        "enabled_motion_uncompensation": False,
+        "enabled_motion_uncompensation": True,
     }
-    main(range_view_config=range_view_config, enable_write=False)
+    main(range_view_config=range_view_config, enable_write=True)
