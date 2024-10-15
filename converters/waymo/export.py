@@ -17,7 +17,6 @@ import tensorflow.compat.v1 as tf
 import utils
 import waymo_open_dataset
 from av2.geometry.se3 import SE3
-from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 from tqdm.contrib.concurrent import process_map
 from waymo_open_dataset import dataset_pb2
@@ -171,7 +170,7 @@ def get_log_ids_from_files(record_dir: str) -> Dict[str, str]:
     return log_ids
 
 
-def _helper(item: Tuple[str, str, str], write: bool = True) -> None:
+def export_log(item: Tuple[str, str, str], write: bool = True) -> None:
     track_id_dict = {}
 
     annotations_list = []
@@ -395,7 +394,7 @@ def export_pose(
     x, y, z = city_SE3_egovehicle[:3, 3]
     R = city_SE3_egovehicle[:3, :3]
     assert np.allclose(city_SE3_egovehicle[3], np.array([0, 0, 0, 1]))
-    q = rotmat2quat(R)
+    q = utils.rotmat2quat(R)
     qw, qx, qy, qz = q
 
     frame = pl.DataFrame(
@@ -484,7 +483,7 @@ def build_argo_label(
     label_dict["length_m"] = label.box.length
     label_dict["width_m"] = label.box.width
     label_dict["height_m"] = label.box.height
-    qx, qy, qz, qw = yaw_to_quaternion3d(label.box.heading)
+    qx, qy, qz, qw = utils.yaw_to_quaternion3d(label.box.heading)
     label_dict["qx"] = qx
     label_dict["qy"] = qy
     label_dict["qz"] = qz
@@ -502,71 +501,22 @@ def build_argo_label(
     return pd.DataFrame.from_dict(label_dict, orient="index").T
 
 
-def yaw_to_quaternion3d(yaw: float) -> Tuple[float, float, float, float]:
-    """
-    Args:
-        yaw: rotation about the z-axis
-
-    Returns:
-        qx,qy,qz,qw: quaternion coefficients
-    """
-    qx, qy, qz, qw = Rotation.from_euler("z", yaw).as_quat()
-    return qx, qy, qz, qw
-
-
-def rotmat2quat(R: np.ndarray) -> np.ndarray:
-    """ """
-    q_scipy = Rotation.from_matrix(R).as_quat()
-    x, y, z, w = q_scipy
-    q_argo = w, x, y, z
-    return q_argo
-
-
-def rotX(deg: float) -> np.ndarray:
-    """Compute 3x3 rotation matrix about the X-axis.
-
-    Args:
-        deg: Euler angle in degrees
-    """
-    t = np.deg2rad(deg)
-    return Rotation.from_euler("x", t).as_matrix()
-
-
-def rotZ(deg: float) -> np.ndarray:
-    """Compute 3x3 rotation matrix about the Z-axis.
-
-    Args:
-        deg: Euler angle in degrees
-    """
-    t = np.deg2rad(deg)
-    return Rotation.from_euler("z", t).as_matrix()
-
-
-def rotY(deg: float) -> np.ndarray:
-    """Compute 3x3 rotation matrix about the Y-axis.
-
-    Args:
-        deg: Euler angle in degrees
-    """
-    t = np.deg2rad(deg)
-    return Rotation.from_euler("y", t).as_matrix()
-
-
-def main() -> None:
-    # Path to the raw Waymo Open dataset (i.e., TFRecords) root.
-    src_root_dir = Path.home() / ".." / "datasets" / "waymo"
-
-    # Path to the destination for the exported Waymo Open dataset.
-    dst_root_dir = Path.home() / "datasets" / "waymo"
-
+def export_dataset(src_root_dir: Path, dst_root_dir: Path) -> None:
     # Process all the splits.
     for split, _ in SPLIT_MAPPING.items():
         src_dir = str(src_root_dir / split)
         dst_dir = str(dst_root_dir / "sensor" / SPLIT_MAPPING[split])
         log_ids = get_log_ids_from_files(src_dir)
         iters = [(a, b, dst_dir) for (a, b) in log_ids.items()]
-        process_map(_helper, iters, max_workers=16)
+        process_map(export_log, iters, max_workers=16)
 
 
 if __name__ == "__main__":
-    main()
+    # Path to the raw Waymo Open dataset (i.e., TFRecords) root.
+    src_root_dir = Path.home() / ".." / "datasets" / "waymo"
+
+    # Path to the destination for the exported Waymo Open dataset.
+    dst_root_dir = Path.home() / "datasets" / "waymo"
+
+    # Export the dataset. This may take awhile.
+    export_dataset(src_root_dir=src_root_dir, dst_root_dir=dst_root_dir)

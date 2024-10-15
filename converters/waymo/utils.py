@@ -1,5 +1,6 @@
 """Utilities for dataset conversion."""
 
+from typing import Tuple
 import cv2
 import google
 import numpy as np
@@ -58,3 +59,15 @@ def undistort_image(
             camera_matrix = np.array([[f_u, 0, c_u], [0, f_v, c_v], [0, 0, 1]])
             dist_coeffs = np.array([k1, k2, p1, p2, k3])
             return cv2.undistort(img, camera_matrix, dist_coeffs)
+
+
+def yaw_to_quaternion3d(yaw: float) -> Tuple[float, float, float, float]:
+    """
+    Args:
+        yaw: rotation about the z-axis
+
+    Returns:
+        qx,qy,qz,qw: quaternion coefficients
+    """
+    qx, qy, qz, qw = Rotation.from_euler("z", yaw).as_quat()
+    return qx, qy, qz, qw
