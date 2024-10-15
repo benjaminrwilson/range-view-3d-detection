@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import polars as pl
 import tensorflow.compat.v1 as tf
+import utils
 import waymo_open_dataset
 from av2.geometry.se3 import SE3
 from scipy.spatial.transform import Rotation
@@ -23,11 +24,9 @@ from waymo_open_dataset import dataset_pb2
 from waymo_open_dataset import dataset_pb2 as open_dataset
 from waymo_open_dataset.utils import frame_utils, range_image_utils, transform_utils
 
-import utils
-
 tf.enable_eager_execution()
 
-SPLIT_MAPPING: Final = {"training": "train", "validation": "val", "testing": "test"}
+SPLIT_MAPPING: Final = {"training": "train", "validation": "val"}
 
 
 # Mapping from Argo Camera names to Waymo Camera names
@@ -554,19 +553,18 @@ def rotY(deg: float) -> np.ndarray:
 
 
 def main() -> None:
-    SPLIT_MAPPING = {"training": "train", "validation": "val"}
+    # Path to the raw Waymo Open dataset (i.e., TFRecords) root.
+    src_root_dir = Path.home() / ".." / "datasets" / "waymo"
+
+    # Path to the destination for the exported Waymo Open dataset.
+    dst_root_dir = Path.home() / "datasets" / "waymo"
+
+    # Process all the splits.
     for split, _ in SPLIT_MAPPING.items():
-        SRC_DIR = str(Path.home() / ".." / "datasets" / "waymo" / split)
-        DST_DIR = str(
-            Path.home()
-            / "data"
-            / "datasets"
-            / "waymo"
-            / "sensor"
-            / SPLIT_MAPPING[split]
-        )
-        log_ids = get_log_ids_from_files(SRC_DIR)
-        iters = [(a, b, DST_DIR) for (a, b) in log_ids.items()]
+        src_dir = str(src_root_dir / split)
+        dst_dir = str(dst_root_dir / "sensor" / SPLIT_MAPPING[split])
+        log_ids = get_log_ids_from_files(src_dir)
+        iters = [(a, b, dst_dir) for (a, b) in log_ids.items()]
         process_map(_helper, iters, max_workers=16)
 
 
