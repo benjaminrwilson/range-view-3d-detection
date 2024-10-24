@@ -1,6 +1,6 @@
-# What Matters in Range View 3D Object Detection
+# What Matters in Range View 3D Object Detection [CoRL 2024]
 
-Paper: https://arxiv.org/abs/2407.16789
+[Paper](https://openreview.net/forum?id=EifoVoIyd5)
 
 ## Datasets
 
